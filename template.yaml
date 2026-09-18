@@ -1,0 +1,70 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Sahakar Saathi — voice-first multilingual assistant for farmers (WeMakeDevs First Commit)
+
+Parameters:
+  ModelId:
+    Type: String
+    Default: us.anthropic.claude-haiku-4-5-20251001-v1:0
+    Description: Bedrock model or inference profile ID used to write answers
+  EmbedModelId:
+    Type: String
+    Default: amazon.titan-embed-text-v2:0
+
+Resources:
+  AudioBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireTempAudio
+            Status: Enabled
+            ExpirationInDays: 1
+
+  AppFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: app/
+      Handler: handler.lambda_handler
+      Runtime: python3.13
+      Architectures: [arm64]
+      MemorySize: 512
+      Timeout: 90
+      Environment:
+        Variables:
+          AUDIO_BUCKET: !Ref AudioBucket
+          MODEL_ID: !Ref ModelId
+          EMBED_MODEL_ID: !Ref EmbedModelId
+      FunctionUrlConfig:
+        AuthType: NONE
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref AudioBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - transcribe:StartTranscriptionJob
+                - transcribe:GetTranscriptionJob
+                - translate:TranslateText
+                - polly:SynthesizeSpeech
+                - bedrock:InvokeModel
+              Resource: "*"
+
+  # Public function URLs need lambda:InvokeFunction in addition to lambda:InvokeFunctionUrl
+  AppFunctionUrlInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AppFunction
+      Action: lambda:InvokeFunction
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+
+Outputs:
+  AppUrl:
+    Description: Live app URL
+    Value: !GetAtt AppFunctionUrl.FunctionUrl

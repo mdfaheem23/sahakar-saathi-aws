@@ -49,7 +49,7 @@ app/            Lambda function (API + web UI)
   handler.py    Request routing and the voice → answer pipeline
   rag.py        Loads the corpus, embeds it, retrieves top passages
   static/       Frontend (single HTML page)
-corpus/         Source documents the assistant is allowed to answer from
+  corpus/       Source documents the assistant is allowed to answer from
 template.yaml   AWS SAM template
 ```
 

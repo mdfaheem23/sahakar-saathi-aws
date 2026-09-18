@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sahakar Saathi</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌾</text></svg>">
+<style>
+  :root {
+    --bg: #f6f4ee; --card: #ffffff; --ink: #1f2a1f; --muted: #5d6b5d;
+    --brand: #2f7d32; --brand-ink: #ffffff; --accent: #f2a900; --line: #e2ded2; --danger: #c62828;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121712; --card: #1b221b; --ink: #e8efe8; --muted: #9fb09f; --brand: #5cb860; --brand-ink: #0d140d; --line: #2c362c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans", sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+  header h1 { margin: 0; font-size: 28px; }
+  header p { margin: 4px 0 20px; color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin-bottom: 16px; }
+  .langs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .langs button { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 16px; cursor: pointer; }
+  .langs button[aria-pressed="true"] { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); font-weight: 600; }
+  #mic { display: block; width: 120px; height: 120px; margin: 4px auto 8px; border-radius: 50%; border: none; background: var(--brand); color: var(--brand-ink); font-size: 44px; cursor: pointer; box-shadow: 0 6px 20px rgb(47 125 50 / .35); transition: transform .15s; }
+  #mic:active { transform: scale(.96); }
+  #mic.recording { background: var(--danger); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 16px rgb(198 40 40 / .15); } }
+  .hint { text-align: center; color: var(--muted); margin: 0 0 16px; }
+  form { display: flex; gap: 8px; }
+  input { flex: 1; min-width: 0; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font-size: 16px; }
+  form button { padding: 12px 18px; border-radius: 10px; border: none; background: var(--accent); color: #1f1a00; font-weight: 600; font-size: 16px; cursor: pointer; }
+  .examples { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .examples button { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 14px; cursor: pointer; }
+  #status { text-align: center; color: var(--muted); min-height: 1.5em; }
+  #status.error { color: var(--danger); }
+  .label { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 4px; }
+  .q { font-style: italic; margin: 0 0 16px; }
+  .answer { font-size: 19px; margin: 0 0 12px; white-space: pre-wrap; }
+  .sources { margin: 12px 0 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+  .sources a { color: var(--brand); }
+  audio { width: 100%; margin-top: 8px; }
+  footer { text-align: center; color: var(--muted); font-size: 13px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>🌾 Sahakar Saathi</h1>
+    <p>Ask about crop insurance (PMFBY) and farmer schemes in your language.</p>
+  </header>
+
+  <section class="card">
+    <div class="langs" role="group" aria-label="Language">
+      <button data-lang="hi" aria-pressed="true">हिन्दी</button>
+      <button data-lang="ta" aria-pressed="false">தமிழ்</button>
+      <button data-lang="en" aria-pressed="false">English</button>
+    </div>
+    <button id="mic" aria-label="Tap to speak">🎤</button>
+    <p class="hint" id="hint">Tap the mic and ask your question</p>
+    <form id="ask">
+      <input id="text" placeholder="…or type your question" autocomplete="off">
+      <button type="submit">Ask</button>
+    </form>
+    <div class="examples" id="examples"></div>
+  </section>
+
+  <p id="status" role="status"></p>
+
+  <section class="card" id="result" hidden>
+    <p class="label">You asked</p>
+    <p class="q" id="r-question"></p>
+    <p class="label">Answer</p>
+    <p class="answer" id="r-answer"></p>
+    <audio id="r-audio" controls hidden></audio>
+    <p class="label" style="margin-top:16px">Sources</p>
+    <ol class="sources" id="r-sources"></ol>
+  </section>
+
+  <footer>Answers come only from official scheme documents. This is not legal advice — confirm with your PACS office. Powered by AWS.</footer>
+</main>
+
+<script>
+const EXAMPLES = {
+  hi: ["बारिश से मेरी फसल खराब हो गई, क्या मुझे बीमा मिलेगा?", "खरीफ फसल का प्रीमियम कितना है?"],
+  ta: ["மழையால் என் பயிர் சேதமடைந்தது, காப்பீடு கிடைக்குமா?", "காரீஃப் பயிருக்கு பிரீமியம் எவ்வளவு?"],
+  en: ["My crop was damaged by rain. Can I claim insurance?", "How much premium do I pay for a kharif crop?"],
+};
+const HINTS = { hi: "माइक दबाएँ और अपना सवाल पूछें", ta: "மைக்கைத் தட்டி உங்கள் கேள்வியைக் கேளுங்கள்", en: "Tap the mic and ask your question" };
+const MAX_SECONDS = 30;
+
+let lang = "hi", recorder = null, chunks = [], stopTimer = null;
+const $ = (id) => document.getElementById(id);
+
+function setLang(next) {
+  lang = next;
+  document.querySelectorAll(".langs button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.lang === lang));
+  $("hint").textContent = HINTS[lang];
+  $("examples").replaceChildren(...EXAMPLES[lang].map((q) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = q;
+    b.onclick = () => send({ text: q });
+    return b;
+  }));
+}
+document.querySelectorAll(".langs button").forEach((b) => (b.onclick = () => setLang(b.dataset.lang)));
+
+function status(msg, isError = false) {
+  $("status").textContent = msg;
+  $("status").className = isError ? "error" : "";
+}
+
+async function send(extra) {
+  status(extra.audio ? "Listening to your question…" : "Finding the answer…");
+  $("result").hidden = true;
+  try {
+    const res = await fetch("/api/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lang, ...extra }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Request failed");
+    render(data);
+    status("");
+  } catch (err) {
+    status(err.message, true);
+  }
+}
+
+function render(data) {
+  $("r-question").textContent = data.question;
+  $("r-answer").textContent = data.answer;
+  const audio = $("r-audio");
+  if (data.audio) {
+    audio.src = "data:audio/mpeg;base64," + data.audio;
+    audio.hidden = false;
+    audio.play().catch(() => {});
+  } else {
+    audio.hidden = true;
+  }
+  $("r-sources").replaceChildren(...data.sources.map((s) => {
+    const li = document.createElement("li");
+    const url = (s.source.match(/https?:\/\/\S+/) || [])[0];
+    li.append(`${s.title} — ${s.heading} `);
+    if (url) {
+      const a = document.createElement("a");
+      a.href = url; a.target = "_blank"; a.rel = "noopener"; a.textContent = "↗";
+      li.append(a);
+    }
+    return li;
+  }));
+  $("result").hidden = false;
+}
+
+$("ask").onsubmit = (e) => {
+  e.preventDefault();
+  const text = $("text").value.trim();
+  if (text) send({ text });
+};
+
+$("mic").onclick = async () => {
+  if (recorder && recorder.state === "recording") return recorder.stop();
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch {
+    return status("Microphone permission is needed to speak. You can type instead.", true);
+  }
+  const mimeType = ["audio/webm", "audio/mp4", "audio/ogg"].find((t) => MediaRecorder.isTypeSupported(t));
+  recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  chunks = [];
+  recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  recorder.onstop = async () => {
+    clearTimeout(stopTimer);
+    stream.getTracks().forEach((t) => t.stop());
+    $("mic").classList.remove("recording");
+    $("mic").textContent = "🎤";
+    const type = recorder.mimeType || mimeType || "audio/webm";
+    const blob = new Blob(chunks, { type });
+    const format = type.includes("mp4") ? "mp4" : type.includes("ogg") ? "ogg" : "webm";
+    const audio = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(",")[1]);
+      reader.readAsDataURL(blob);
+    });
+    send({ audio, format });
+  };
+  recorder.start();
+  $("mic").classList.add("recording");
+  $("mic").textContent = "■";
+  status("Recording… tap again to stop");
+  stopTimer = setTimeout(() => recorder.state === "recording" && recorder.stop(), MAX_SECONDS * 1000);
+};
+
+setLang("hi");
+</script>
+</body>
+</html>
