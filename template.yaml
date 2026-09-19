@@ -10,8 +10,104 @@ Parameters:
   EmbedModelId:
     Type: String
     Default: amazon.titan-embed-text-v2:0
+    Description: Bedrock embedding model used by the Knowledge Base (Titan v2 = 1024 dims)
 
 Resources:
+  # ---------- Knowledge base: docs in S3 -> Titan embeddings -> S3 Vectors ----------
+  DocsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  VectorBucket:
+    Type: AWS::S3Vectors::VectorBucket
+    Properties:
+      VectorBucketName: !Sub "${AWS::StackName}-vectors-${AWS::AccountId}"
+
+  VectorIndex:
+    Type: AWS::S3Vectors::Index
+    Properties:
+      VectorBucketArn: !GetAtt VectorBucket.VectorBucketArn
+      IndexName: !Sub "${AWS::StackName}-index"
+      DataType: float32
+      Dimension: 1024
+      DistanceMetric: cosine
+      MetadataConfiguration:
+        # Chunk text and source JSON exceed the 2 KB filterable-metadata limit
+        NonFilterableMetadataKeys:
+          - AMAZON_BEDROCK_TEXT
+          - AMAZON_BEDROCK_METADATA
+
+  KnowledgeBaseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: bedrock.amazonaws.com }
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals: { aws:SourceAccount: !Ref AWS::AccountId }
+      Policies:
+        - PolicyName: KnowledgeBaseAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/${EmbedModelId}
+              - Effect: Allow
+                Action:
+                  - s3vectors:GetIndex
+                  - s3vectors:QueryVectors
+                  - s3vectors:PutVectors
+                  - s3vectors:GetVectors
+                  - s3vectors:DeleteVectors
+                Resource: !Ref VectorIndex
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt DocsBucket.Arn
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "${DocsBucket.Arn}/*"
+
+  KnowledgeBase:
+    Type: AWS::Bedrock::KnowledgeBase
+    Properties:
+      Name: !Sub "${AWS::StackName}-kb"
+      RoleArn: !GetAtt KnowledgeBaseRole.Arn
+      KnowledgeBaseConfiguration:
+        Type: VECTOR
+        VectorKnowledgeBaseConfiguration:
+          EmbeddingModelArn: !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/${EmbedModelId}
+      StorageConfiguration:
+        Type: S3_VECTORS
+        S3VectorsConfiguration:
+          IndexArn: !Ref VectorIndex
+          VectorBucketArn: !GetAtt VectorBucket.VectorBucketArn
+
+  DataSource:
+    Type: AWS::Bedrock::DataSource
+    Properties:
+      Name: !Sub "${AWS::StackName}-docs"
+      KnowledgeBaseId: !Ref KnowledgeBase
+      DataDeletionPolicy: RETAIN
+      DataSourceConfiguration:
+        Type: S3
+        S3Configuration:
+          BucketArn: !GetAtt DocsBucket.Arn
+          InclusionPrefixes: [sections/]
+      VectorIngestionConfiguration:
+        ChunkingConfiguration:
+          # scripts/sync_corpus.py already uploads one file per section
+          ChunkingStrategy: NONE
+
+  # ---------- App ----------
   AudioBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -39,13 +135,16 @@ Resources:
         Variables:
           AUDIO_BUCKET: !Ref AudioBucket
           MODEL_ID: !Ref ModelId
-          EMBED_MODEL_ID: !Ref EmbedModelId
+          KNOWLEDGE_BASE_ID: !Ref KnowledgeBase
       FunctionUrlConfig:
         AuthType: NONE
       Policies:
         - S3CrudPolicy:
             BucketName: !Ref AudioBucket
         - Statement:
+            - Effect: Allow
+              Action: bedrock:Retrieve
+              Resource: !GetAtt KnowledgeBase.KnowledgeBaseArn
             - Effect: Allow
               Action:
                 - transcribe:StartTranscriptionJob
@@ -68,3 +167,9 @@ Outputs:
   AppUrl:
     Description: Live app URL
     Value: !GetAtt AppFunctionUrl.FunctionUrl
+  DocsBucketName:
+    Value: !Ref DocsBucket
+  KnowledgeBaseId:
+    Value: !Ref KnowledgeBase
+  DataSourceId:
+    Value: !GetAtt DataSource.DataSourceId
