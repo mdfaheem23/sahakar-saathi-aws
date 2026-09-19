@@ -13,9 +13,10 @@ from langgraph.graph import END, START, StateGraph
 import rag
 import services
 
-# Below this cosine similarity the best passage is treated as unrelated, so we
-# answer "not found" without calling the LLM at all.
-MIN_SCORE = float(os.environ.get("MIN_SCORE", "0.2"))
+# Below this Knowledge Base relevance score the best passage is treated as unrelated, so we
+# answer "not found" without calling the LLM. Measured on the live KB: off-topic
+# questions score ~0.52-0.55, real PMFBY questions ~0.70-0.87.
+MIN_SCORE = float(os.environ.get("MIN_SCORE", "0.6"))
 
 
 class SaathiState(TypedDict, total=False):

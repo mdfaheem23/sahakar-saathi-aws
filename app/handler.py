@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from graph import saathi
-from services import AUDIO_FORMATS, LANGUAGES
+from services import AUDIO_FORMATS, LANGUAGES, VoiceUnavailable
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -62,6 +62,8 @@ def lambda_handler(event, _context):
             body = base64.b64decode(body).decode("utf-8")
         try:
             return ask(json.loads(body))
+        except VoiceUnavailable:
+            return respond(503, {"error": "Voice input is still being activated. Please type your question for now."})
         except Exception as exc:  # surface a readable error to the UI instead of a bare 502
             print(f"ask failed: {exc!r}")
             return respond(500, {"error": "Something went wrong. Please try again."})

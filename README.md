@@ -21,7 +21,7 @@ The assistant is a **LangGraph** state machine. Each step is a node, running on 
 2. **translate_in**: **Amazon Translate** translates the question to English.
 3. **retrieve**: **Amazon Bedrock Knowledge Bases** searches the official scheme documents. The vectors are stored in **Amazon S3 Vectors**.
 4. **Relevance check**: if nothing relevant is found, the graph goes to **not_found** and says so honestly, without calling the LLM. Otherwise it goes to **generate**.
-5. **generate**: **Amazon Bedrock** (Claude) answers **only from those passages** and cites its sources.
+5. **generate**: **Amazon Bedrock** (Amazon Nova 2 Lite) answers **only from those passages** and cites its sources.
 6. **translate_out**: **Amazon Translate** translates the answer back to the farmer's language.
 7. **speak**: **Amazon Polly** reads the answer aloud.
 
@@ -50,7 +50,7 @@ graph TD
 | Amazon Bedrock Knowledge Bases | Managed RAG: ingestion + semantic retrieval with source metadata |
 | Amazon Bedrock – Titan Text Embeddings v2 | Embeddings for the knowledge base (1024-dim) |
 | Amazon S3 Vectors | Vector database for the knowledge base |
-| Amazon Bedrock – Claude | Grounded answer generation |
+| Amazon Bedrock – Amazon Nova 2 Lite | Grounded answer generation (+ translation fallback) |
 | Amazon Polly | Text → speech (Hindi, Indian English) |
 | AWS Lambda + Function URL | Runs the LangGraph agent + serves the web app |
 | Amazon S3 | Source documents for the knowledge base + temporary audio (auto-deleted after 1 day) |
@@ -73,11 +73,11 @@ template.yaml   AWS SAM template (app + knowledge base + S3 Vectors)
 
 ## Deploy
 
-Requires an AWS account (region `us-east-1`) with Bedrock model access enabled for Claude Haiku 4.5 and Titan Text Embeddings v2.
+Requires an AWS account in `us-east-1`. Bedrock's Amazon Nova 2 Lite and Titan Text Embeddings v2 need no extra access forms.
 
 ```bash
 brew install awscli aws-sam-cli
-aws configure            # or: aws configure sso
+aws login                # or: aws configure
 sam build
 sam deploy --guided --stack-name sahakar-saathi --capabilities CAPABILITY_IAM   # first time; afterwards `sam deploy`
 python scripts/sync_corpus.py   # load corpus/ into the knowledge base (rerun whenever corpus changes)
@@ -86,8 +86,13 @@ python scripts/sync_corpus.py   # load corpus/ into the knowledge base (rerun wh
 The stack prints the live URL (`AppUrl`) when the deploy finishes. To add a scheme, add a Markdown file to `corpus/` in the same
 `# Title` / `Source:` / `## Section` format and run the sync script again.
 
+## Live demo
+
+https://vdzccb7fvhdnhhfisbdpgidp5u0ebmdr.lambda-url.us-east-1.on.aws/
+
 ## Limitations
 
 - Amazon Polly has no Tamil voice, so Tamil answers come back as text only. Hindi and English answers are also read aloud.
 - The corpus is a small starter set (PMFBY). The answers are only as good as the documents in `corpus/`.
+- On a brand-new AWS account, Transcribe and Translate can take up to ~24h to activate. Until then the app translates with Bedrock and voice input asks you to type.
 - This is a hackathon prototype. It is not legal or financial advice.
