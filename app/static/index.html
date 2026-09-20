@@ -157,7 +157,9 @@ function render(data) {
 $("ask").onsubmit = (e) => {
   e.preventDefault();
   const text = $("text").value.trim();
-  if (text) send({ text });
+  if (!text) return;
+  $("text").value = "";  // clear so the next question doesn't merge into this one
+  send({ text });
 };
 
 $("mic").onclick = async () => {
